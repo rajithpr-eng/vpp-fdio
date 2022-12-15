@@ -1,7 +1,7 @@
 #include "udps_includes.h"
 
 void
-udps_node_policy_apply(uint32_t sw_if_index, uint8_t is_rx)
+udps_node_policy_apply(u32 sw_if_index, u8 is_rx)
 {
     if (is_rx) {
         vnet_feature_enable_disable("device-input",
@@ -17,7 +17,7 @@ udps_node_policy_apply(uint32_t sw_if_index, uint8_t is_rx)
 }
 
 void
-udps_node_policy_remove(uint32_t sw_if_index, uint8_t is_rx)
+udps_node_policy_remove(u32 sw_if_index, u8 is_rx)
 {
     if (is_rx) {
         vnet_feature_enable_disable("device-input",
