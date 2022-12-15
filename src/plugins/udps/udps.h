@@ -3,6 +3,8 @@
 
 #define UDPS_NO_PORT   (~0)
 #define UDPS_NO_ACTION (NULL)
+#define UDPS_INVALID_RULE (~0)
+#define UDPS_INVALID_POLICY_ID (~0)
 
 enum udps_rewrite_oper_e {
   UDPS_REWRITE_UNUSED = 0,
@@ -111,7 +113,7 @@ void udps_db_policy_apply(u32 sw_if_index, u8 is_rx, u8 *name);
 
 /*  Removes policy on interface in the given direction.
 */
-void udps_db_policy_remove(u32 sw_if_index, u8 is_rx, u8 *name);
+void udps_db_policy_remove(u32 sw_if_index, u8 is_rx);
 
 /*  Applies policy on interface in the given direction.
 */
