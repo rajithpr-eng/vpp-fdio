@@ -4,6 +4,7 @@ udps_main_t udps_main;
 
 
 bool udps_db_rule_policy_get(u8 *name, udps_policy_entry_t **pe);
+bool udps_db_policy_get_by_sw_if_index(u32 sw_if_index, u8 is_rx, udps_policy_entry_t **pe);
 
 void
 udps_db_rule_action_add(u8 *name, u8 oper, u16 offset, u8 *value, u8 len, u32 out_port)
@@ -65,8 +66,61 @@ udps_db_rule_action_get(u8 *name, udps_rule_action_t **ra)
 }
 
 bool
-udps_db_rule_match(u32 sw_if_index, u8 is_rx, u8 *bytes, udps_rule_action_t **ra)
+udps_db_rule_match_pkt(u8 *bytes, u16 len, udps_match_pkt_t *mp)
 {
+    u32 mpl = mp->offset + vec_len(mp->value);
+    bool ret = true;
+
+    if (mpl > len) {
+        return false;
+    }
+
+    for (int i = mp->offset; i < mpl; i++) {
+        if (bytes[i] != mp->value[i]) {
+            ret = false;
+            break;
+        }
+    }
+    return ret;
+}
+
+bool
+udps_db_rule_item_match(u8 *bytes, u16 len, udps_rule_entry_t *re)
+{
+    bool ret;
+
+    for (int i = 0; i < vec_len(re->match_pkt); i++) {
+        ret = udps_db_rule_match_pkt(bytes, len, &re->match_pkt[i]);
+        if (false == ret) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+bool
+udps_db_rule_match(u32 sw_if_index, u8 is_rx, u8 *bytes, u16 len, udps_rule_action_t **ra)
+{
+    udps_policy_entry_t *pe;
+    u32 i;
+    bool ret;
+
+    ret = udps_db_policy_get_by_sw_if_index(sw_if_index, is_rx, &pe);
+    if (false == ret) {
+        return false;    
+    }
+    ret = false;
+    for (i = 0; i < vec_len(pe->rules); i++) {
+        ret = udps_db_rule_item_match(bytes, len, &pe->rules[i]);
+        if (true == ret) {
+            break;
+        }
+    }
+    if (false == ret) {
+        return false;
+    }
+    *ra = pool_elt_at_index(udps_main.action_db, pe->rules[i].act_id);
     return true;
 }
 
@@ -183,6 +237,27 @@ udps_db_policy_remove(u32 sw_if_index, u8 is_rx)
                           sw_if_index, UDPS_INVALID_POLICY_ID);
         udps_main.egr_policy_by_sw_if_index[sw_if_index] = UDPS_INVALID_POLICY_ID;
     }
+}
+
+bool
+udps_db_policy_get_by_sw_if_index(u32 sw_if_index, u8 is_rx, udps_policy_entry_t **pe)
+{
+    u32 policy_id;
+
+    if (is_rx) {
+        vec_validate_init_empty(udps_main.ing_policy_by_sw_if_index,
+                          sw_if_index, UDPS_INVALID_POLICY_ID);
+        policy_id = udps_main.ing_policy_by_sw_if_index[sw_if_index];
+    } else {
+        vec_validate_init_empty(udps_main.egr_policy_by_sw_if_index,
+                          sw_if_index, UDPS_INVALID_POLICY_ID);
+        policy_id = udps_main.egr_policy_by_sw_if_index[sw_if_index];
+    }
+    if (UDPS_INVALID_POLICY_ID == policy_id) {
+        return false;
+    }
+    *pe = pool_elt_at_index(udps_main.policy_db, policy_id);
+    return true;
 }
 
 static clib_error_t*

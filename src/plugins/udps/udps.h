@@ -80,7 +80,7 @@ bool udps_db_rule_action_get(u8 *name, udps_rule_action_t **ra);
     If present, rule action is returned in ra.
     Otherwise, returns false.
 */
-bool udps_db_rule_match(u32 sw_if_index, u8 is_rx, u8 *bytes, udps_rule_action_t **ra);
+bool udps_db_rule_match(u32 sw_if_index, u8 is_rx, u8 *bytes, u16 len, udps_rule_action_t **ra);
 
 /*  Add a rule entry.
     Creates rule entry if not present.
