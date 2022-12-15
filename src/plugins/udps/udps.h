@@ -3,7 +3,7 @@
 
 #define UDPS_NO_PORT   (~0)
 #define UDPS_NO_ACTION (NULL)
-#define UDPS_INVALID_RULE (~0)
+#define UDPS_INVALID_RULE (255)
 #define UDPS_INVALID_POLICY_ID (~0)
 
 enum udps_rewrite_oper_e {

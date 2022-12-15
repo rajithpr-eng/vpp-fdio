@@ -2,7 +2,7 @@
 
 udps_main_t udps_main;
 
-
+/* Forward declaration of pvt functions */
 bool udps_db_rule_policy_get(u8 *name, udps_policy_entry_t **pe);
 bool udps_db_policy_get_by_sw_if_index(u32 sw_if_index, u8 is_rx, udps_policy_entry_t **pe);
 
@@ -156,7 +156,7 @@ udps_db_rule_entry_add(u8 *name, u8 id, u8 oper, u16 offset, u8 *value, u8 *anam
         case UDPS_MATCH_PKT:
             mp.offset = offset;
             mp.value = vec_dup(value);
-	    vec_add1(pe->rules[id].match_pkt, mp);
+            vec_add1(pe->rules[id].match_pkt, mp);
             break;
     }
     if (aname) {
@@ -171,12 +171,33 @@ udps_db_rule_entry_add(u8 *name, u8 id, u8 oper, u16 offset, u8 *value, u8 *anam
 u8
 udps_db_rule_entry_cnt(u8 *name)
 {
-    return 0;
+    udps_policy_entry_t *pe;
+    bool ret;
+
+    ret = udps_db_rule_policy_get(name, &pe);
+    if (false == ret) {
+        return 0;
+    }
+    return vec_len(pe->rules);
 }
 
 bool
 udps_db_rule_entry_get(u8 *name, u8 id, udps_rule_entry_t **re)
 {
+    udps_policy_entry_t *pe;
+    bool ret;
+
+    ret = udps_db_rule_policy_get(name, &pe);
+    if (false == ret) {
+        return false;
+    }
+    if (id >= vec_len(pe->rules)) {
+        return false;
+    }
+    if (pe->rules[id].rule_id == UDPS_INVALID_RULE) {
+        return false;
+    }
+    *re = &pe->rules[id];
     return true;
 }
 
