@@ -14,5 +14,5 @@
 add_vpp_plugin(udps
   SOURCES
   udps_node.c
-
+  udps_cli.c
 )
