@@ -45,7 +45,6 @@ static char *udps_tx_error_strings[] = {
 typedef enum
 {
     UDPS_TX_NEXT_DROP,
-    UDPS_TX_NEXT_INTERFACE_TX,
     UDPS_TX_N_NEXT,
 } udps_tx_next_t;
 
@@ -244,6 +243,7 @@ VLIB_NODE_FN (udps_tx_node) (vlib_main_t *vm,
             vnet_main_t *vnm = vnet_get_main ();
             u8 *eth;
             udps_rule_action_t *ra = NULL;
+            vnet_hw_interface_t *hi0;
 
             /* speculatively enqueue b0 to the current next frame */
             bi0 = from[0];
@@ -260,8 +260,8 @@ VLIB_NODE_FN (udps_tx_node) (vlib_main_t *vm,
             
             sw_if_index0 = tx_parent_intf->sw_if_index;
 
-            /* Determine the next node */
-            next0 = VNET_DEVICE_INPUT_NEXT_ETHERNET_INPUT; // is this correct ??
+            /* Do the business logic */
+            counter[UDPS_TX_ERROR_UDPS_TX]++;
 
             eth = (u8 *)vlib_buffer_get_current (b0);
             if (udps_db_rule_match(sw_if_index0, false, eth, 
@@ -276,10 +276,8 @@ VLIB_NODE_FN (udps_tx_node) (vlib_main_t *vm,
                         }
                     }
             }
-
-            // Do the business logic
-            counter[UDPS_TX_ERROR_UDPS_TX]++;
-
+            hi0 = vnet_get_sup_hw_interface (vnm,vnet_buffer (b0)->sw_if_index[VLIB_TX]);
+            next0 = hi0->output_node_next_index;
             /* verify speculative enqueue, maybe switch current next frame */
             vlib_validate_buffer_enqueue_x1 (vm, node, next_index,
                     to_next, n_left_to_next,
@@ -335,7 +333,6 @@ VLIB_REGISTER_NODE (udps_tx_node) =
     .error_strings = udps_tx_error_strings,
     .next_nodes    = {
         [UDPS_TX_NEXT_DROP] = "error-drop",
-        [UDPS_TX_NEXT_INTERFACE_TX] = "interface-tx",
     }
 
 };
