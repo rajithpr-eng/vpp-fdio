@@ -92,13 +92,51 @@ VLIB_CLI_COMMAND (set_udps_policy_action_command, static) = {
 };
 /* *INDENT-ON* */
 
+void 
+udps_dump_policy_action (vlib_main_t * vm, u8* action_name) 
+{
+  udps_rule_action_t *ra;
+  bool ret = udps_db_rule_action_get(action_name, &ra);
+  if (!ret) {
+     vlib_cli_output(vm, "No policy action found for given name");
+     return;
+  }
+  vlib_cli_output(vm, "Policy action_name=%s out_port=%d oper=%u offset=%d", 
+	               ra->name, ra->out_port,  ra->rewrite->oper, ra->rewrite->offset);
+  if (ra->rewrite->oper == UDPS_REWRITE_REMOVE) {
+     vlib_cli_output(vm, "len=%d", ra->rewrite->len);
+  }
+  
+  vlib_cli_output(vm, "value: ");  
+  for (int i =0; i<vec_len(ra->rewrite->value);i++) {
+     vlib_cli_output(vm, "%x",ra->rewrite->value[i]);
+  } 
+}
 
 static clib_error_t *
 udps_policy_action_show (vlib_main_t * vm,
 		         unformat_input_t * input, vlib_cli_command_t * cmd)
 {
   clib_error_t *error = 0;
-  vlib_cli_output(vm, "udps_policy_action_show, WORK in PROGRESS, retry later\n");
+  u8* action_name = 0;
+  u8 name_set = 0;
+  while (unformat_check_input(input) != UNFORMAT_END_OF_INPUT) {
+    if (unformat(input, "name %s", &action_name)) {
+      name_set = 1;
+    } else {
+      vlib_cli_output(vm, "ERROR: Cli not in correct form\n");
+      return 0;
+    }
+  }
+
+  if (!name_set) {
+    vlib_cli_output(vm, "ERROR: Invalid Command");
+    return error;
+  } 
+
+  vlib_cli_output(vm, "got action name=%s", action_name);
+  udps_dump_policy_action(vm, action_name);
+  vlib_cli_output(vm, "udps_policy_action_show, WORK in PROGRESS, \n");
   return error;
 }
 
@@ -111,7 +149,7 @@ udps_policy_action_show (vlib_main_t * vm,
 VLIB_CLI_COMMAND (show_udps_policy_action_command, static) = {
   .path = "show udps policy-action",
   .function = udps_policy_action_show,
-  .short_help = "show udps policy-action <action-name>",
+  .short_help = "show udps policy-action name <action-name>",
   .is_mp_safe = 1,
 };
 /* *INDENT-ON* */
@@ -207,11 +245,51 @@ VLIB_CLI_COMMAND (set_udps_policy_command, static) = {
 /* *INDENT-ON* */
 
 
+void 
+udps_dump_policy_rule_by_id (vlib_main_t * vm, u8* policy_name, u32 id) 
+{
+  udps_rule_entry_t *re;
+  bool ret = udps_db_rule_entry_get(policy_name, id, &re);
+  if (!ret) {
+     vlib_cli_output(vm, "No policy rule found for given name and id");
+     return;
+  }
+  vlib_cli_output(vm, "Policy name=%s  rule id=%u action_id=%u offset=%d value= ", 
+	               policy_name, re->rule_id,  re->act_id, re->match_pkt->offset);
+    
+  for (int i =0; i<vec_len(re->match_pkt->value);i++) {
+     vlib_cli_output(vm, "%x",re->match_pkt->value[i]);
+  } 
+}
+
 static clib_error_t *
 udps_policy_show (vlib_main_t * vm,
 		  unformat_input_t * input, vlib_cli_command_t * cmd)
 {
   clib_error_t *error = 0;
+  u8* policy_name = 0;
+  u32 id = 0;
+  u8 name_set = 0, rule_id_set = 0;
+  while (unformat_check_input(input) != UNFORMAT_END_OF_INPUT) {
+    if (unformat(input, "name %s", &policy_name)) {
+      name_set = 1;
+    } else if(unformat(input, "rule %u", &id)) {
+      rule_id_set = 1;
+    } else {
+      vlib_cli_output(vm, "ERROR: CLI not in proper form\n");
+      return 0;
+    }
+  }
+  
+  if (!name_set || !rule_id_set) {
+    vlib_cli_output(vm, "ERROR: Invalid Command");
+    return error;
+  } 
+
+  vlib_cli_output(vm, "Got below params: policy  name=%s, rule=%u",
+                       policy_name, id); 
+  
+  udps_dump_policy_rule_by_id(vm, policy_name, id);
   vlib_cli_output(vm, "udps_policy_show, WORK in PROGRESS, retry later\n");
   return error;
 }
@@ -225,7 +303,7 @@ udps_policy_show (vlib_main_t * vm,
 VLIB_CLI_COMMAND (show_udps_policy_command, static) = {
   .path = "show udps policy",
   .function = udps_policy_show,
-  .short_help = "show udps policy <policy-name>",
+  .short_help = "show udps policy name <policy-name> rule <id>",
   .is_mp_safe = 1,
 };
 /* *INDENT-ON* */
@@ -314,6 +392,24 @@ udps_policy_interface_show (vlib_main_t * vm,
 		  unformat_input_t * input, vlib_cli_command_t * cmd)
 {
   clib_error_t *error = 0;
+  vnet_main_t *vnm = vnet_get_main ();
+  u32 if_name;
+  u8 name_set = 0;
+  while (unformat_check_input(input) != UNFORMAT_END_OF_INPUT) {
+    if (unformat(input, "name %U", unformat_vnet_sw_interface, vnm, &if_name)) {
+      name_set = 1;
+    } else {
+      vlib_cli_output(vm, "ERROR: CLI not in proper form\n");
+      return 0;
+    }
+  }
+
+  if (!name_set) {
+     vlib_cli_output(vm, "Error: Interface name required\n");
+     return 0;
+  }
+ 
+  vlib_cli_output(vm, "got if_sw_index = %d", if_name);
   vlib_cli_output(vm, "udps_policy_show, WORK in PROGRESS, retry later\n");
   return error;
 }
@@ -327,7 +423,7 @@ udps_policy_interface_show (vlib_main_t * vm,
 VLIB_CLI_COMMAND (show_udps_policy_interface_command, static) = {
   .path = "show udps interface",
   .function = udps_policy_interface_show,
-  .short_help = "show udps interface <interface-name>",
+  .short_help = "show udps interface name <interface-name>",
   .is_mp_safe = 1,
 };
 /* *INDENT-ON* */
