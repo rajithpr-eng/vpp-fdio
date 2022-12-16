@@ -75,8 +75,8 @@ udps_db_rule_match_pkt(u8 *bytes, u16 len, udps_match_pkt_t *mp)
         return false;
     }
 
-    for (int i = mp->offset; i < mpl; i++) {
-        if (bytes[i] != mp->value[i]) {
+    for (int i = mp->offset, j = 0; i < mpl; i++) {
+        if (bytes[i] != mp->value[j++]) {
             ret = false;
             break;
         }
@@ -263,7 +263,7 @@ udps_db_policy_remove(u32 sw_if_index, u8 is_rx)
 bool
 udps_db_policy_get_by_sw_if_index(u32 sw_if_index, u8 is_rx, udps_policy_entry_t **pe)
 {
-    u32 policy_id;
+    int policy_id;
 
     if (is_rx) {
         vec_validate_init_empty(udps_main.ing_policy_by_sw_if_index,

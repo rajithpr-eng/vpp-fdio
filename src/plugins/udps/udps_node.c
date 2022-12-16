@@ -21,33 +21,6 @@ static char *udps_rx_error_strings[] = {
 #undef _
 };
 
-#define foreach_udps_tx_error          \
-    _(UDPS_TX,    "UDPS outgoing packets")          \
-    _(RULE_MATCHED,    "Rule matched on intf")      \
-    _(RULE_ACTION_FOUND,    "Rule action found")    \
-    _(VALID_OUT_PORT,    "Out port rewritten")      \
-    _(DROP,       "UDPS drop pkt")
-
-typedef enum
-{
-#define _(sym,str) UDPS_TX_ERROR_##sym,
-      foreach_udps_tx_error
-#undef _
-          UDPS_TX_N_ERROR,
-} udps_tx_error_t;
-
-static char *udps_tx_error_strings[] = {
-#define _(sym,string) string,
-      foreach_udps_tx_error
-#undef _
-};
-
-typedef enum
-{
-    UDPS_TX_NEXT_DROP,
-    UDPS_TX_N_NEXT,
-} udps_tx_next_t;
-
 void
 udps_node_policy_apply(u32 sw_if_index, u8 is_rx)
 {
@@ -85,7 +58,7 @@ udps_apply_rule_action (vlib_main_t *vm,
                         udps_rule_action_t *ra, 
                         bool is_rx)
 {
-    u32 offset, len;
+    int offset, len;
     u8 *write_ptr;
     /* rewrite the out_port and be done with this */
     if (ra->out_port != UDPS_NO_PORT) {
@@ -97,7 +70,7 @@ udps_apply_rule_action (vlib_main_t *vm,
         switch(ra->rewrite[i].oper) {
         case UDPS_REWRITE_INSERT: 
             offset = ra->rewrite[i].offset;
-            len = ra->rewrite[i].len;
+            len = vec_len(ra->rewrite[i].value);
             vlib_buffer_advance(b, offset);
             vlib_buffer_move(vm, b, (len + offset));
             /* alter pkt len and rewind current_data*/
@@ -110,7 +83,7 @@ udps_apply_rule_action (vlib_main_t *vm,
             break;
         case UDPS_REWRITE_REPLACE:
             offset = ra->rewrite[i].offset;
-            len = ra->rewrite[i].len;
+            len = vec_len(ra->rewrite[i].value);
             vlib_buffer_advance(b, offset);
             write_ptr = vlib_buffer_get_current (b);
             clib_memcpy_fast (write_ptr, (u8 *)ra->rewrite[i].value, len);
@@ -173,7 +146,8 @@ VLIB_NODE_FN (udps_rx_node) (vlib_main_t *vm,
             sw_if_index0 = vnet_buffer (b0)->sw_if_index[VLIB_RX];
 
             /* Determine the next node */
-            next0 = VNET_DEVICE_INPUT_NEXT_ETHERNET_INPUT; // is this correct ??
+            //next0 = VNET_DEVICE_INPUT_NEXT_ETHERNET_INPUT; // is this correct ??
+            next0 = 0;
 
             /* Do the business logic */
             counter[UDPS_RX_ERROR_UDPS_RX]++;
@@ -188,6 +162,7 @@ VLIB_NODE_FN (udps_rx_node) (vlib_main_t *vm,
                         udps_apply_rule_action(vm, b0, ra, true);
                         if (ra->out_port != UDPS_NO_PORT) {
                              counter[UDPS_RX_ERROR_VALID_OUT_PORT]++;
+			     next0 = 1;
                         }
                     }
             }
@@ -214,94 +189,6 @@ VLIB_NODE_FN (udps_rx_node) (vlib_main_t *vm,
     return frame->n_vectors;
 }
 
-VLIB_NODE_FN (udps_tx_node) (vlib_main_t *vm,
-                             vlib_node_runtime_t *node,
-                             vlib_frame_t *frame)
-{
-    u32 counter[UDPS_TX_N_ERROR] = {0};
-    u32 n_left_from, *from, *to_next;
-    udps_tx_next_t next_index;
-
-    from = vlib_frame_vector_args (frame);
-    n_left_from = frame->n_vectors;   /* number of packets to process */
-    next_index = node->cached_next_index;
-
-    while (n_left_from > 0) 
-    {
-        u32 n_left_to_next;
-
-        /* get space to enqueue frame to graph node "next_index" */
-        vlib_get_next_frame (vm, node, next_index, to_next, n_left_to_next);
-
-        while (n_left_from > 0 && n_left_to_next > 0)
-        {
-            u32 bi0;
-            vlib_buffer_t *b0;
-            u32 next0;
-            u32 sw_if_index0;
-            vnet_sw_interface_t *tx_parent_intf;
-            vnet_main_t *vnm = vnet_get_main ();
-            u8 *eth;
-            udps_rule_action_t *ra = NULL;
-            vnet_hw_interface_t *hi0;
-
-            /* speculatively enqueue b0 to the current next frame */
-            bi0 = from[0];
-            to_next[0] = bi0;
-            from += 1;
-            to_next += 1;
-            n_left_from -= 1;
-            n_left_to_next -= 1;
-
-            b0 = vlib_get_buffer (vm, bi0);
-
-            sw_if_index0 = vnet_buffer (b0)->sw_if_index[VLIB_TX];
-            tx_parent_intf = vnet_get_sup_sw_interface (vnm, sw_if_index0);
-            
-            sw_if_index0 = tx_parent_intf->sw_if_index;
-
-            /* Do the business logic */
-            counter[UDPS_TX_ERROR_UDPS_TX]++;
-
-            eth = (u8 *)vlib_buffer_get_current (b0);
-            if (udps_db_rule_match(sw_if_index0, false, eth, 
-                        vlib_buffer_length_in_chain(vm, b0),&ra)) {
-                    counter[UDPS_TX_ERROR_RULE_MATCHED]++;
-                    if (ra) {
-                        counter[UDPS_TX_ERROR_RULE_ACTION_FOUND]++;
-                        /* apply Rule action on b(0) */
-                        udps_apply_rule_action(vm, b0, ra, false);
-                        if (ra->out_port != UDPS_NO_PORT) {
-                             counter[UDPS_TX_ERROR_VALID_OUT_PORT]++;
-                        }
-                    }
-            }
-            hi0 = vnet_get_sup_hw_interface (vnm,vnet_buffer (b0)->sw_if_index[VLIB_TX]);
-            next0 = hi0->output_node_next_index;
-            /* verify speculative enqueue, maybe switch current next frame */
-            vlib_validate_buffer_enqueue_x1 (vm, node, next_index,
-                    to_next, n_left_to_next,
-                    bi0, next0);
-        }
-        vlib_put_next_frame (vm, node, next_index, n_left_to_next);
-    }
-
-
-
-#define _(n, s)                                                            \
-{                                                                          \
-    if (counter[UDPS_TX_ERROR_##n]) {                                      \
-        vlib_node_increment_counter(vm, node->node_index,                  \
-                                    UDPS_TX_ERROR_##n,                     \
-                                    counter[UDPS_TX_ERROR_##n]);           \
-    }                                                                      \
-}
-        foreach_udps_tx_error
-#undef _
-
-  return frame->n_vectors;
-}
-
 /* *INDENT-OFF* */
 VLIB_REGISTER_NODE (udps_rx_node) =
 {
@@ -309,8 +196,10 @@ VLIB_REGISTER_NODE (udps_rx_node) =
     .vector_size   = sizeof (u32),
     .format_trace  = NULL,
     .type          = VLIB_NODE_TYPE_INTERNAL,
-    .n_next_nodes  = VNET_DEVICE_INPUT_N_NEXT_NODES,
-    .next_nodes    = VNET_DEVICE_INPUT_NEXT_NODES,
+    .n_next_nodes  = 2,
+    .next_nodes    = { [0] = "ethernet-input",
+	               [1] = "interface-output" 
+   		     }, 
     .n_errors      = ARRAY_LEN(udps_rx_error_strings),
     .error_strings = udps_rx_error_strings,
 };
@@ -320,28 +209,6 @@ VNET_FEATURE_INIT (udps_rx_node, static) =
     .arc_name    = "device-input",
     .node_name   = "udps-rx-node",
     .runs_before = VNET_FEATURES ("ethernet-input"),
-};
-
-VLIB_REGISTER_NODE (udps_tx_node) =
-{
-    .name          = "udps-tx-node",
-    .vector_size   = sizeof (u32),
-    .format_trace  = NULL,
-    .type          = VLIB_NODE_TYPE_INTERNAL,
-    .n_next_nodes  = UDPS_TX_N_NEXT,
-    .n_errors      = ARRAY_LEN(udps_tx_error_strings),
-    .error_strings = udps_tx_error_strings,
-    .next_nodes    = {
-        [UDPS_TX_NEXT_DROP] = "error-drop",
-    }
-
-};
-
-VNET_FEATURE_INIT (udps_tx_node, static) =
-{
-    .arc_name    = "interface-output",
-    .node_name   = "udps-tx-node",
-    .runs_before = VNET_FEATURES ("interface-tx"),
 };
 
 VLIB_PLUGIN_REGISTER () =

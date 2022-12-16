@@ -369,6 +369,7 @@ udps_policy_interface_set (vlib_main_t * vm,
   vlib_cli_output(vm, "Got below params: if name=%d, rx_set=%d, tx_set=%d, policy=%s",
                        if_name, rx_set, tx_set, policy_name); 
   udps_db_policy_apply(if_name, rx_set, policy_name);
+  udps_node_policy_apply(if_name, rx_set);
   vlib_cli_output(vm, "udps_policy_interface_set, WORK in PROGRESS, retry later\n");
   return error;
 }
