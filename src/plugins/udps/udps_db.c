@@ -36,13 +36,35 @@ udps_db_rule_action_add(u8 *name, u8 oper, u16 offset, u8 *value, u8 len, u32 ou
         ra->out_port = out_port;
     }
     if (false == ret){
-        hash_set_mem(udps_main.action_by_name, name, act_id);
+        hash_set_mem(udps_main.action_by_name, ra->name, act_id);
     }
 }
 
 bool
 udps_db_rule_action_del(u8 *name)
 {
+    udps_rewrite_t rw;
+    udps_rule_action_t *ra;
+    bool ret;
+
+    ret = udps_db_rule_action_get(name, &ra);
+    if (false == ret) {
+        return true;
+    }
+    hash_unset_mem(udps_main.action_by_name, ra->name);
+    for (int i = 0; i < vec_len(ra->rewrite); i++) {
+        rw = ra->rewrite[i];
+	switch(rw.oper) {
+            case UDPS_REWRITE_INSERT:
+            case UDPS_REWRITE_REPLACE:
+                vec_free(rw.value);
+                break;
+	}
+    }
+    vec_free(ra->rewrite);
+    vec_free(ra->name);
+    pool_put(udps_main.action_db, ra);
+
     return true;
 }
 
@@ -159,7 +181,7 @@ udps_db_rule_entry_add(u8 *name, u8 id, u8 oper, u16 offset, u8 *value, u8 *anam
         pe->rules[id].act_id = act_id;
     }
     if (false == ret){
-        hash_set_mem(udps_main.policy_by_name, name, policy_id);
+        hash_set_mem(udps_main.policy_by_name, pe->name, policy_id);
     }
     return true;
 }
@@ -200,6 +222,24 @@ udps_db_rule_entry_get(u8 *name, u8 id, udps_rule_entry_t **re)
 bool
 udps_db_rule_policy_del(u8 *name)
 {
+    udps_policy_entry_t *pe;
+    bool ret;
+
+    ret = udps_db_rule_policy_get(name, &pe);
+    if (false == ret) {
+        return false;
+    }
+    hash_unset_mem(udps_main.policy_by_name, pe->name);
+    for (int i = 0; i < vec_len(pe->rules); i++) {
+        for (int j = 0; j < vec_len(pe->rules[i].match_pkt); j++) {
+            vec_free(pe->rules[i].match_pkt[j].value);
+	}
+        vec_free(pe->rules[i].match_pkt);
+    }
+    vec_free(pe->rules);
+    vec_free(pe->name);
+    pool_put(udps_main.policy_db, pe);
+
     return true;
 }
 
