@@ -2,10 +2,6 @@
 
 udps_main_t udps_main;
 
-/* Forward declaration of pvt functions */
-bool udps_db_rule_policy_get(u8 *name, udps_policy_entry_t **pe);
-bool udps_db_policy_get_by_sw_if_index(u32 sw_if_index, u8 is_rx, udps_policy_entry_t **pe);
-
 void
 udps_db_rule_action_add(u8 *name, u8 oper, u16 offset, u8 *value, u8 len, u32 out_port)
 {
