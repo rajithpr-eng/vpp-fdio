@@ -247,6 +247,49 @@ VLIB_CLI_COMMAND (set_udps_policy_command, static) = {
 };
 /* *INDENT-ON* */
 
+void 
+udps_dump_policy_rule_by_rule_entry (vlib_main_t * vm, udps_rule_entry_t *re, char *delimiter) 
+{
+  vlib_cli_output(vm,"%-40s : %u", "Rule Id", re->rule_id);
+  vlib_cli_output(vm,"%-40s : %u", "Action Id", re->act_id);
+  vlib_cli_output(vm, "%s\n", delimiter);
+  vlib_cli_output(vm, "%-40s | %s", "Packet Offset", "Value");
+  for (int i = 0; i<vec_len(re->match_pkt); i++) {
+    vlib_cli_output(vm,"%-40d | %U", re->match_pkt[i].offset, format_hex_bytes, re->match_pkt[i].value, vec_len(re->match_pkt[i].value));
+  }
+  vlib_cli_output(vm, "%s\n", delimiter);
+}
+
+void 
+udps_dump_policy_rule_by_policy_entry (vlib_main_t * vm, udps_policy_entry_t *pe, char *delimiter)
+{
+  vlib_cli_output(vm,"%-40s : %s", "Policy Name", pe->name);
+  vlib_cli_output(vm, "%s\n", delimiter);
+
+  for (int i=0;i< vec_len(pe->rules); i++) {
+     if (pe->rules[i].rule_id == UDPS_INVALID_RULE){
+        continue;
+     }
+     vlib_cli_output(vm, "\n");
+     udps_dump_policy_rule_by_rule_entry(vm, &pe->rules[i], delimiter);
+  }  
+}
+
+void 
+udps_dump_policy_rule (vlib_main_t * vm, u8* policy_name) 
+{
+  udps_policy_entry_t *pe;
+  char delimiter[65] = "";
+  bool ret = udps_db_rule_policy_get(policy_name, &pe);
+  if (!ret) {
+     vlib_cli_output(vm, "No policy rule found for given name:%s", policy_name);
+     return;
+  }
+  for (int i = 0; i < 65; i++) {
+     strcat(delimiter, "-");
+  }
+  udps_dump_policy_rule_by_policy_entry(vm, pe, delimiter);  
+}
 
 void 
 udps_dump_policy_rule_by_id (vlib_main_t * vm, u8* policy_name, u32 id) 
@@ -258,22 +301,12 @@ udps_dump_policy_rule_by_id (vlib_main_t * vm, u8* policy_name, u32 id)
      vlib_cli_output(vm, "No policy rule found for given name:%s and id:%d", policy_name, id);
      return;
   }
-  vlib_cli_output(vm, "Policy Rule");
+  vlib_cli_output(vm,"%-40s : %s", "Policy name", policy_name);
   for (int i = 0; i < 65; i++) {
      strcat(delimiter, "-");
   }
   vlib_cli_output(vm, "%s\n", delimiter);
-  vlib_cli_output(vm,"%-40s : %s", "Policy name", policy_name);
-  vlib_cli_output(vm,"%-40s : %u", "Rule Id", re->rule_id);
-  vlib_cli_output(vm,"%-40s : %u", "Action Id", re->act_id);
-  vlib_cli_output(vm, "%s\n", delimiter);
-  vlib_cli_output(vm, "Packet Matches");
-  vlib_cli_output(vm, "%s\n", delimiter);
-  vlib_cli_output(vm, "%-40s | %s", "Packet Offset", "Value");
-  for (int i = 0; i<vec_len(re->match_pkt); i++) {
-    vlib_cli_output(vm,"%-40d | %U", re->match_pkt[i].offset, format_hex_bytes, re->match_pkt[i].value, vec_len(re->match_pkt[i].value));
-  }
-  vlib_cli_output(vm, "%s\n", delimiter); 
+  udps_dump_policy_rule_by_rule_entry(vm, re, delimiter);  
 }
 
 static clib_error_t *
@@ -295,11 +328,17 @@ udps_policy_show (vlib_main_t * vm,
     }
   }
   
-  if (!name_set || !rule_id_set) {
-    vlib_cli_output(vm, "ERROR: Policy name or rule id not set");
+  if (!name_set) {
+    vlib_cli_output(vm, "ERROR: Policy name");
     return error;
   } 
-  udps_dump_policy_rule_by_id(vm, policy_name, id);
+
+  if (rule_id_set) {
+    udps_dump_policy_rule_by_id(vm, policy_name, id);
+  } else {
+    udps_dump_policy_rule(vm, policy_name);	  
+  }
+
   return error;
 }
 
@@ -312,7 +351,7 @@ udps_policy_show (vlib_main_t * vm,
 VLIB_CLI_COMMAND (show_udps_policy_command, static) = {
   .path = "show udps policy",
   .function = udps_policy_show,
-  .short_help = "show udps policy name <policy-name> rule <id>",
+  .short_help = "show udps policy name <policy-name> [rule <id>]",
   .is_mp_safe = 1,
 };
 /* *INDENT-ON* */
@@ -375,11 +414,9 @@ udps_policy_interface_set (vlib_main_t * vm,
     return error;
   } 
 
-  vlib_cli_output(vm, "Got below params: if name=%d, rx_set=%d, tx_set=%d, policy=%s",
-                       if_name, rx_set, tx_set, policy_name); 
   udps_db_policy_apply(if_name, rx_set, policy_name);
   udps_node_policy_apply(if_name, rx_set);
-  vlib_cli_output(vm, "udps_policy_interface_set, WORK in PROGRESS, retry later\n");
+  vlib_cli_output(vm, "Policy applied on interface successfully\n");
   return error;
 }
 
@@ -396,6 +433,24 @@ VLIB_CLI_COMMAND (set_udps_policy_interface_command, static) = {
 };
 /* *INDENT-ON* */
 
+void 
+udps_dump_interface_policy (vlib_main_t * vm, u32 if_index, u8 is_rx) 
+{
+  udps_policy_entry_t *pe;
+  char delimiter[65] = "";
+  bool ret = udps_db_policy_get_by_sw_if_index(if_index, is_rx, &pe);
+  if (!ret) {
+     vlib_cli_output(vm, "No policy entry found for given if_index:%d and direction :%s",
+		     if_index, is_rx?"RX":"TX");
+     return;
+  }
+  vlib_cli_output(vm, "Interface Policy sw_if_index=%d Direction=%s", if_index, is_rx?"RX":"TX");
+  for (int i = 0; i < 65; i++) {
+     strcat(delimiter, "-");
+  }
+  vlib_cli_output(vm, "%s\n\n", delimiter);
+  udps_dump_policy_rule_by_policy_entry(vm, pe, delimiter);
+}
 
 static clib_error_t *
 udps_policy_interface_show (vlib_main_t * vm,
@@ -405,22 +460,31 @@ udps_policy_interface_show (vlib_main_t * vm,
   vnet_main_t *vnm = vnet_get_main ();
   u32 if_name;
   u8 name_set = 0;
+  u8 rx_set = 0, tx_set = 0;
   while (unformat_check_input(input) != UNFORMAT_END_OF_INPUT) {
     if (unformat(input, "name %U", unformat_vnet_sw_interface, vnm, &if_name)) {
       name_set = 1;
+    } else if(unformat(input, "direction")) {
+       if (unformat(input, "rx")) {
+         rx_set = 1;
+       } else if (unformat(input, "tx")) {
+         tx_set = 1;
+       } else {
+         vlib_cli_output(vm, "ERROR: Invalid direction\n");
+	 return 0;
+       }
     } else {
       vlib_cli_output(vm, "ERROR: CLI not in proper form\n");
       return 0;
     }
   }
 
-  if (!name_set) {
-     vlib_cli_output(vm, "Error: Interface name required\n");
+  if (!name_set  || (!rx_set && !tx_set)) {
+     vlib_cli_output(vm, "Error: Interface name and direction required\n");
      return 0;
   }
- 
-  vlib_cli_output(vm, "got if_sw_index = %d", if_name);
-  vlib_cli_output(vm, "udps_policy_show, WORK in PROGRESS, retry later\n");
+  
+  udps_dump_interface_policy (vm, if_name, rx_set);
   return error;
 }
 
@@ -433,7 +497,7 @@ udps_policy_interface_show (vlib_main_t * vm,
 VLIB_CLI_COMMAND (show_udps_policy_interface_command, static) = {
   .path = "show udps interface",
   .function = udps_policy_interface_show,
-  .short_help = "show udps interface name <interface-name>",
+  .short_help = "show udps interface name <interface-name> direction <rx|tx>",
   .is_mp_safe = 1,
 };
 /* *INDENT-ON* */
