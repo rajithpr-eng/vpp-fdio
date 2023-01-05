@@ -266,8 +266,14 @@ udps_dump_policy_rule_by_id (vlib_main_t * vm, u8* policy_name, u32 id)
   vlib_cli_output(vm,"%-40s : %s", "Policy name", policy_name);
   vlib_cli_output(vm,"%-40s : %u", "Rule Id", re->rule_id);
   vlib_cli_output(vm,"%-40s : %u", "Action Id", re->act_id);
-  vlib_cli_output(vm,"%-40s : %d", "Packet Offset", re->match_pkt->offset);
-  vlib_cli_output(vm,"%-40s : %U", "Value", format_hex_bytes, re->match_pkt->value, vec_len(re->match_pkt->value));
+  vlib_cli_output(vm, "%s\n", delimiter);
+  vlib_cli_output(vm, "Packet Matches");
+  vlib_cli_output(vm, "%s\n", delimiter);
+  vlib_cli_output(vm, "%-40s | %s", "Packet Offset", "Value");
+  for (int i = 0; i<vec_len(re->match_pkt); i++) {
+    vlib_cli_output(vm,"%-40d | %U", re->match_pkt[i].offset, format_hex_bytes, re->match_pkt[i].value, vec_len(re->match_pkt[i].value));
+  }
+  vlib_cli_output(vm, "%s\n", delimiter); 
 }
 
 static clib_error_t *
