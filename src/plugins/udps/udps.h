@@ -123,4 +123,22 @@ void udps_node_policy_apply(u32 sw_if_index, u8 is_rx);
 */
 void udps_node_policy_remove(u32 sw_if_index, u8 is_rx);
 
+/*  Get policy on interface in the given direction.
+    If present, policy entry is returned in pe.
+    Otherwise, returns false.
+*/
+bool udps_db_policy_get(u32 sw_if_index, u8 is_rx, udps_policy_entry_t **pe);
+
+/*  Get policy by name.
+    If present, policy entry is returned in pe.
+    Otherwise, returns false.
+*/
+bool udps_db_rule_policy_get(u8 *name, udps_policy_entry_t **pe);
+
+/*  Get policy on interface in the given direction.
+    If present, policy entry is returned in pe.
+    Otherwise, returns false.
+*/
+bool udps_db_policy_get_by_sw_if_index(u32 sw_if_index, u8 is_rx, udps_policy_entry_t **pe);
+
 #endif /* __UDPS_H__ */
