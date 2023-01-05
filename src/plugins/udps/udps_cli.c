@@ -64,15 +64,8 @@ udps_policy_action_set (vlib_main_t * vm,
   } else {
     oper = UDPS_REWRITE_UNUSED;
   }
-  vlib_cli_output(vm, "Got below params: action name=%s, offset=%u, oper=%u, len=%d, out_port=%d",
-                       action_name, offset_val, oper, len, out_port);
-
-  vlib_cli_output(vm, "\n Hex rewrite_str :");
-  for (int i =0; i<vec_len(rewrite_str);i++) {
-       vlib_cli_output(vm, "%x", rewrite_str[i]);
-  } 
   udps_db_rule_action_add(action_name, oper, offset_val, rewrite_str, len, out_port);
-  vlib_cli_output(vm, "udps_policy_action_set, WORK in PROGRESS, retry later\n");
+  vlib_cli_output(vm, "Policy action added successfuly.\n");
   return error;
 }
 
@@ -92,25 +85,46 @@ VLIB_CLI_COMMAND (set_udps_policy_action_command, static) = {
 };
 /* *INDENT-ON* */
 
+char* udps_oper_id_to_name(u8 oper) 
+{
+  switch(oper) {
+    case UDPS_REWRITE_UNUSED:
+      return "UDPS_REWRITE_UNUSED";
+    case UDPS_REWRITE_INSERT:
+      return "UDPS_REWRITE_INSERT";
+    case UDPS_REWRITE_REPLACE:
+      return "UDPS_REWRITE_REPLACE";
+    case UDPS_REWRITE_REMOVE:
+      return "UDPS_REWRITE_REMOVE";
+    default:
+      return "";
+  }
+  return "";
+}
+
 void 
 udps_dump_policy_action (vlib_main_t * vm, u8* action_name) 
 {
   udps_rule_action_t *ra;
+  char delimiter[65] = ""; 
   bool ret = udps_db_rule_action_get(action_name, &ra);
   if (!ret) {
-     vlib_cli_output(vm, "No policy action found for given name");
+     vlib_cli_output(vm, "No Policy Action found for given name = %s", action_name);
      return;
   }
-  vlib_cli_output(vm, "Policy action_name=%s out_port=%d oper=%u offset=%d", 
-	               ra->name, ra->out_port,  ra->rewrite->oper, ra->rewrite->offset);
-  if (ra->rewrite->oper == UDPS_REWRITE_REMOVE) {
-     vlib_cli_output(vm, "len=%d", ra->rewrite->len);
+  vlib_cli_output(vm, "Policy Action");
+  for (int i = 0; i < 65; i++) {
+     strcat(delimiter, "-");
   }
-  
-  vlib_cli_output(vm, "value: ");  
-  for (int i =0; i<vec_len(ra->rewrite->value);i++) {
-     vlib_cli_output(vm, "%x",ra->rewrite->value[i]);
-  } 
+  vlib_cli_output(vm, "%s\n", delimiter);
+  vlib_cli_output(vm,"%-40s : %s", "Policy Action name", ra->name);
+  vlib_cli_output(vm,"%-40s : %d", "Out-port", ra->out_port);
+  vlib_cli_output(vm,"%-40s : %s", "Oper", udps_oper_id_to_name(ra->rewrite->oper));
+  vlib_cli_output(vm,"%-40s : %d", "Packet Offset", ra->rewrite->offset);
+  if (ra->rewrite->oper == UDPS_REWRITE_REMOVE) {
+     vlib_cli_output(vm,"%-40s : %d", "Rewrite Length", ra->rewrite->len);
+  }
+  vlib_cli_output(vm,"%-40s : %U", "Value", format_hex_bytes, ra->rewrite->value, vec_len(ra->rewrite->value));
 }
 
 static clib_error_t *
@@ -130,13 +144,10 @@ udps_policy_action_show (vlib_main_t * vm,
   }
 
   if (!name_set) {
-    vlib_cli_output(vm, "ERROR: Invalid Command");
+    vlib_cli_output(vm, "ERROR: Policy action name needed!");
     return error;
   } 
-
-  vlib_cli_output(vm, "got action name=%s", action_name);
   udps_dump_policy_action(vm, action_name);
-  vlib_cli_output(vm, "udps_policy_action_show, WORK in PROGRESS, \n");
   return error;
 }
 
@@ -211,14 +222,6 @@ udps_policy_set (vlib_main_t * vm,
     return error;
   } 
 
-  vlib_cli_output(vm, "Got below params: action name=%s, rule=%u, offset=%u, action=%s",
-                       policy_name, id, offset_val, action_name); 
-
-  vlib_cli_output(vm, "\n Hex val_str :");
-  for (int i =0; i<vec_len(val_str);i++) {
-    vlib_cli_output(vm, "%x", val_str[i]);
-  }  
-
   if (offset_set) {
     oper = UDPS_MATCH_PKT;
   } else {
@@ -226,7 +229,7 @@ udps_policy_set (vlib_main_t * vm,
   }
 
   udps_db_rule_entry_add(policy_name, id, oper, offset_val, val_str, action_name);
-  vlib_cli_output(vm, "udps_policy_set, WORK in PROGRESS, retry later\n");
+  vlib_cli_output(vm, "Policy Rule addedd successfully.\n");
   return error;
 }
 
@@ -249,17 +252,28 @@ void
 udps_dump_policy_rule_by_id (vlib_main_t * vm, u8* policy_name, u32 id) 
 {
   udps_rule_entry_t *re;
+  char delimiter[65] = "";
   bool ret = udps_db_rule_entry_get(policy_name, id, &re);
   if (!ret) {
-     vlib_cli_output(vm, "No policy rule found for given name and id");
+     vlib_cli_output(vm, "No policy rule found for given name:%s and id:%d", policy_name, id);
      return;
   }
-  vlib_cli_output(vm, "Policy name=%s  rule id=%u action_id=%u offset=%d value= ", 
-	               policy_name, re->rule_id,  re->act_id, re->match_pkt->offset);
-    
-  for (int i =0; i<vec_len(re->match_pkt->value);i++) {
-     vlib_cli_output(vm, "%x",re->match_pkt->value[i]);
-  } 
+  vlib_cli_output(vm, "Policy Rule");
+  for (int i = 0; i < 65; i++) {
+     strcat(delimiter, "-");
+  }
+  vlib_cli_output(vm, "%s\n", delimiter);
+  vlib_cli_output(vm,"%-40s : %s", "Policy name", policy_name);
+  vlib_cli_output(vm,"%-40s : %u", "Rule Id", re->rule_id);
+  vlib_cli_output(vm,"%-40s : %u", "Action Id", re->act_id);
+  vlib_cli_output(vm, "%s\n", delimiter);
+  vlib_cli_output(vm, "Packet Matches");
+  vlib_cli_output(vm, "%s\n", delimiter);
+  vlib_cli_output(vm, "%-40s | %s", "Packet Offset", "Value");
+  for (int i = 0; i<vec_len(re->match_pkt); i++) {
+    vlib_cli_output(vm,"%-40d | %U", re->match_pkt[i].offset, format_hex_bytes, re->match_pkt[i].value, vec_len(re->match_pkt[i].value));
+  }
+  vlib_cli_output(vm, "%s\n", delimiter); 
 }
 
 static clib_error_t *
@@ -282,15 +296,10 @@ udps_policy_show (vlib_main_t * vm,
   }
   
   if (!name_set || !rule_id_set) {
-    vlib_cli_output(vm, "ERROR: Invalid Command");
+    vlib_cli_output(vm, "ERROR: Policy name or rule id not set");
     return error;
   } 
-
-  vlib_cli_output(vm, "Got below params: policy  name=%s, rule=%u",
-                       policy_name, id); 
-  
   udps_dump_policy_rule_by_id(vm, policy_name, id);
-  vlib_cli_output(vm, "udps_policy_show, WORK in PROGRESS, retry later\n");
   return error;
 }
 
