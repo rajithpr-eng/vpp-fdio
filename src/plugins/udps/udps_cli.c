@@ -170,7 +170,23 @@ udps_policy_action_delete (vlib_main_t * vm,
 		           unformat_input_t * input, vlib_cli_command_t * cmd)
 {
   clib_error_t *error = 0;
-  vlib_cli_output(vm, "udps_policy_action_delete, WORK in PROGRESS, retry later\n");
+  u8* action_name = 0;
+  u8 name_set = 0;
+  while (unformat_check_input(input) != UNFORMAT_END_OF_INPUT) {
+    if (unformat(input, "name %s", &action_name)) {
+      name_set = 1;
+    } else {
+      vlib_cli_output(vm, "ERROR: Cli not in correct form\n");
+      return 0;
+    }
+  }
+
+  if (!name_set) {
+    vlib_cli_output(vm, "ERROR: Policy action name needed!");
+    return error;
+  }
+  udps_db_rule_action_del(action_name);
+  vlib_cli_output(vm, "Policy action deleted successfully"); 
   return error;
 }
 
@@ -361,7 +377,23 @@ udps_policy_delete (vlib_main_t * vm,
 		           unformat_input_t * input, vlib_cli_command_t * cmd)
 {
   clib_error_t *error = 0;
-  vlib_cli_output(vm, "udps_policy_delete, WORK in PROGRESS, retry later\n");
+  u8* policy_name = 0;
+  u8 name_set = 0;
+  while (unformat_check_input(input) != UNFORMAT_END_OF_INPUT) {
+    if (unformat(input, "name %s", &policy_name)) {
+      name_set = 1;
+    } else {
+      vlib_cli_output(vm, "ERROR: CLI not in proper form\n");
+      return 0;
+    }
+  }
+  
+  if (!name_set) {
+    vlib_cli_output(vm, "ERROR: Policy rule name required.");
+    return error;
+  }
+  udps_db_rule_policy_del(policy_name);
+  vlib_cli_output(vm, "Policy rule deleted successfully \n");
   return error;
 }
 
@@ -507,7 +539,34 @@ udps_policy_interface_delete (vlib_main_t * vm,
 		              unformat_input_t * input, vlib_cli_command_t * cmd)
 {
   clib_error_t *error = 0;
-  vlib_cli_output(vm, "udps_policy_interface_delete, WORK in PROGRESS, retry later\n");
+  vnet_main_t *vnm = vnet_get_main ();
+  u32 if_name;
+  u8 name_set = 0;
+  u8 rx_set = 0, tx_set = 0;
+  while (unformat_check_input(input) != UNFORMAT_END_OF_INPUT) {
+    if (unformat(input, "name %U", unformat_vnet_sw_interface, vnm, &if_name)) {
+      name_set = 1;
+    } else if(unformat(input, "direction")) {
+       if (unformat(input, "rx")) {
+         rx_set = 1;
+       } else if (unformat(input, "tx")) {
+         tx_set = 1;
+       } else {
+         vlib_cli_output(vm, "ERROR: Invalid direction\n");
+	 return 0;
+       }
+    } else {
+      vlib_cli_output(vm, "ERROR: CLI not in proper form\n");
+      return 0;
+    }
+  }
+
+  if (!name_set  || (!rx_set && !tx_set)) {
+     vlib_cli_output(vm, "Error: Interface name and direction required\n");
+     return 0;
+  }
+  udps_db_policy_remove(if_name, rx_set); 
+  vlib_cli_output(vm, "Interface Policy Deleted Successfully\n");
   return error;
 }
 
